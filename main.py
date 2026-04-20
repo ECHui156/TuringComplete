@@ -15,11 +15,54 @@ Turing Complete - 终端应用主入口
 
 from __future__ import annotations
 
-import curses
 import importlib
+import os
+import subprocess
+import sys
 import traceback
 from dataclasses import dataclass
-from typing import Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+
+
+if TYPE_CHECKING:
+	import curses as curses_typing
+	CursesWindow = curses_typing.window
+else:
+	CursesWindow = Any
+
+
+def _bootstrap_curses() -> tuple[object | None, str | None]:
+	"""加载 curses；在 Windows 下若缺失则尝试自动安装 windows-curses。
+
+	返回：
+	- (curses_module, None) 表示可用；
+	- (None, error_message) 表示不可用并携带原因。
+	"""
+	try:
+		import curses as loaded_curses
+		return loaded_curses, None
+	except ModuleNotFoundError as first_err:
+		# Windows 平台的标准 Python 默认不内置 _curses，需要 windows-curses 适配包。
+		if os.name == "nt":
+			try:
+				subprocess.check_call(
+					[sys.executable, "-m", "pip", "install", "windows-curses"],
+					stdout=subprocess.DEVNULL,
+					stderr=subprocess.DEVNULL,
+				)
+				import curses as loaded_curses
+				return loaded_curses, None
+			except Exception as install_err:
+				return None, (
+					"当前 Python 环境缺少 curses 支持，且自动安装 windows-curses 失败。"
+					f" 原始错误: {first_err}; 安装错误: {install_err}"
+				)
+
+		return None, f"当前 Python 环境缺少 curses 支持: {first_err}"
+
+
+# 全局加载（后续函数都使用该对象）。
+curses, CURSES_ERROR = _bootstrap_curses()
 
 
 # -----------------------------
@@ -68,7 +111,7 @@ class GameRegistry:
 		"""按 key 排序返回已注册游戏。"""
 		return [self._games[k] for k in sorted(self._games.keys())]
 
-	def resolve_runner(self, key: str) -> Optional[Callable[[curses.window], None]]:
+	def resolve_runner(self, key: str) -> Optional[Callable[[CursesWindow], None]]:
 		"""根据 key 解析并返回游戏入口函数。
 
 		返回值：
@@ -112,7 +155,7 @@ def build_registry() -> GameRegistry:
 # -----------------------------
 
 
-def safe_addstr(stdscr: curses.window, y: int, x: int, text: str, attr: int = 0) -> None:
+def safe_addstr(stdscr: CursesWindow, y: int, x: int, text: str, attr: int = 0) -> None:
 	"""安全写字符串。
 
 	curses 在写到边界外时会抛 `curses.error`，这里统一吞掉，
@@ -124,7 +167,7 @@ def safe_addstr(stdscr: curses.window, y: int, x: int, text: str, attr: int = 0)
 		pass
 
 
-def reset_main_screen_state(stdscr: curses.window) -> None:
+def reset_main_screen_state(stdscr: CursesWindow) -> None:
 	"""恢复主菜单期望的 curses 状态。
 
 	子游戏可能改动：
@@ -144,7 +187,7 @@ def reset_main_screen_state(stdscr: curses.window) -> None:
 		pass
 
 
-def draw_splash(stdscr: curses.window) -> None:
+def draw_splash(stdscr: CursesWindow) -> None:
 	"""绘制启动页。"""
 	stdscr.clear()
 	h, w = stdscr.getmaxyx()
@@ -159,7 +202,7 @@ def draw_splash(stdscr: curses.window) -> None:
 	stdscr.getch()
 
 
-def draw_menu(stdscr: curses.window, registry: GameRegistry, message: str = "") -> None:
+def draw_menu(stdscr: CursesWindow, registry: GameRegistry, message: str = "") -> None:
 	"""渲染主菜单。"""
 	stdscr.clear()
 	h, w = stdscr.getmaxyx()
@@ -187,7 +230,7 @@ def draw_menu(stdscr: curses.window, registry: GameRegistry, message: str = "") 
 	stdscr.refresh()
 
 
-def read_menu_choice(stdscr: curses.window) -> str:
+def read_menu_choice(stdscr: CursesWindow) -> str:
 	"""读取菜单选择。
 
 	交互策略：
@@ -207,7 +250,7 @@ def read_menu_choice(stdscr: curses.window) -> str:
 	return ""
 
 
-def run_game_with_guard(stdscr: curses.window, runner: Callable[[curses.window], None]) -> Optional[str]:
+def run_game_with_guard(stdscr: CursesWindow, runner: Callable[[CursesWindow], None]) -> Optional[str]:
 	"""运行子游戏，并在异常时回传错误信息给主菜单显示。"""
 	try:
 		runner(stdscr)
@@ -226,7 +269,7 @@ def run_game_with_guard(stdscr: curses.window, runner: Callable[[curses.window],
 # -----------------------------
 
 
-def app(stdscr: curses.window) -> None:
+def app(stdscr: CursesWindow) -> None:
 	"""curses wrapper 回调。"""
 	# 主界面初始化。
 	reset_main_screen_state(stdscr)
@@ -272,6 +315,20 @@ def app(stdscr: curses.window) -> None:
 
 def main() -> None:
 	"""程序总入口。"""
+	if curses is None:
+		# 友好提示，避免“窗口一闪而过”。
+		print("[Turing Complete] 启动失败：无法导入 curses。")
+		print(CURSES_ERROR or "未知错误")
+		print("\n建议：")
+		print("1) 使用可联网环境执行: python -m pip install windows-curses")
+		print("2) 安装后重新运行: python main.py")
+		try:
+			input("\n按回车键退出...")
+		except EOFError:
+			pass
+		return
+
+	# 正常路径：进入 curses 主循环。
 	curses.wrapper(app)
 
 

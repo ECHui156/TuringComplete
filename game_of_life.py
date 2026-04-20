@@ -339,7 +339,16 @@ def run(stdscr: curses.window) -> None:
 	这个函数只依赖 `stdscr`，不依赖主程序内部状态，便于插件化扩展。
 	"""
 	# 保存（并在 finally 中恢复）当前窗口阻塞策略，避免影响主菜单。
-	prev_delay = stdscr.getdelay()
+	# 兼容说明：
+	# - 部分 curses 实现（尤其 Windows 的适配实现）没有 `getdelay()` 方法；
+	# - 因此这里使用“有则取值、无则降级”的策略，避免 AttributeError。
+	prev_delay = None
+	if hasattr(stdscr, "getdelay"):
+		try:
+			prev_delay = stdscr.getdelay()
+		except Exception:
+			# 即使读取失败也不影响游戏主体逻辑，后续走默认恢复路径。
+			prev_delay = None
 
 	# 子游戏内部初始化。
 	stdscr.keypad(True)
@@ -393,4 +402,8 @@ def run(stdscr: curses.window) -> None:
 
 	finally:
 		# 离开子游戏前恢复窗口 timeout 模式，尽量不污染主程序状态。
-		stdscr.timeout(prev_delay)
+		if prev_delay is None:
+			# 无法读取原始 delay 时，恢复为阻塞模式（与主菜单默认一致）。
+			stdscr.timeout(-1)
+		else:
+			stdscr.timeout(prev_delay)
