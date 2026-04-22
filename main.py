@@ -146,6 +146,16 @@ def build_registry() -> GameRegistry:
 		)
 	)
 
+	# 一维元胞自动机：Rule 110。
+	registry.register(
+		GameSpec(
+			key="2",
+			title="Rule 110 (1D Cellular Automaton)",
+			module="rule_110",
+			entry="run",
+		)
+	)
+
 	# 未来新增游戏时，在这里追加 register(...) 即可。
 	return registry
 
