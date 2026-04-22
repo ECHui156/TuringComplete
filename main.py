@@ -1,16 +1,16 @@
 """
-Turing Complete - 终端应用主入口
-=================================
+Turing Complete - terminal app entry point
+==========================================
 
-本文件负责：
-1) 初始化 curses 主界面；
-2) 维护“可扩展”的游戏注册表；
-3) 根据用户输入，把 `stdscr` 控制权交给对应子游戏模块；
-4) 子游戏结束后，安全恢复主菜单所需的终端状态。
+This file is responsible for:
+1) initializing the curses main UI;
+2) maintaining an extensible game registry;
+3) dispatching `stdscr` control to selected game modules;
+4) restoring terminal state safely after a sub-game exits.
 
-设计目标：
-- 新增游戏时，避免在主流程写大量 if-elif；
-- 对 curses 上下文切换做防御式处理，降低界面崩溃风险。
+Design goals:
+- avoid large if-elif chains when adding games;
+- defensively handle curses context switching to reduce UI crashes.
 """
 
 from __future__ import annotations
@@ -140,7 +140,7 @@ def build_registry() -> GameRegistry:
 	registry.register(
 		GameSpec(
 			key="1",
-			title="康威生命游戏",
+			title="Conway's Game of Life",
 			module="game_of_life",
 			entry="run",
 		)
@@ -191,9 +191,9 @@ def draw_splash(stdscr: CursesWindow) -> None:
 	"""绘制启动页。"""
 	stdscr.clear()
 	h, w = stdscr.getmaxyx()
-	title = "图灵完备 (Turing Complete)"
+	title = "Turing Complete"
 	subtitle = "Terminal Playground for Turing-Complete Systems"
-	hint = "按任意键进入主菜单"
+	hint = "Press any key to open the main menu"
 
 	safe_addstr(stdscr, max(0, h // 2 - 1), max(0, (w - len(title)) // 2), title, curses.A_BOLD)
 	safe_addstr(stdscr, max(0, h // 2), max(0, (w - len(subtitle)) // 2), subtitle)
@@ -208,8 +208,8 @@ def draw_menu(stdscr: CursesWindow, registry: GameRegistry, message: str = "") -
 	h, w = stdscr.getmaxyx()
 
 	# 标题区
-	safe_addstr(stdscr, 1, 2, "=== 图灵完备 (Turing Complete) ===", curses.A_BOLD)
-	safe_addstr(stdscr, 2, 2, "请选择一个系统/游戏：", curses.A_UNDERLINE)
+	safe_addstr(stdscr, 1, 2, "=== Turing Complete ===", curses.A_BOLD)
+	safe_addstr(stdscr, 2, 2, "Select a system/game:", curses.A_UNDERLINE)
 
 	# 动态菜单区：遍历注册表，而不是硬编码 if-elif。
 	line = 4
@@ -218,15 +218,15 @@ def draw_menu(stdscr: CursesWindow, registry: GameRegistry, message: str = "") -
 		line += 1
 
 	# 固定退出项（也可后续改成注册项）。
-	safe_addstr(stdscr, line, 4, "0. 退出")
+	safe_addstr(stdscr, line, 4, "0. Exit")
 	line += 2
 
-	safe_addstr(stdscr, line, 2, "输入数字后按回车，或直接按对应数字键。", curses.A_DIM)
+	safe_addstr(stdscr, line, 2, "Enter a number and press Enter, or press a digit key directly.", curses.A_DIM)
 
 	if message:
 		safe_addstr(stdscr, min(h - 2, line + 2), 2, message, curses.A_BOLD)
 
-	safe_addstr(stdscr, h - 1, 2, "提示：进入游戏后按 Q 返回主菜单。", curses.A_DIM)
+	safe_addstr(stdscr, h - 1, 2, "Tip: Press Q in a game to return to the main menu.", curses.A_DIM)
 	stdscr.refresh()
 
 
@@ -293,18 +293,18 @@ def app(stdscr: CursesWindow) -> None:
 
 		# 无效输入。
 		if not choice:
-			message = "请输入有效选项。"
+			message = "Please enter a valid option."
 			continue
 
 		# 动态解析子游戏入口。
 		try:
 			runner = registry.resolve_runner(choice)
 		except Exception as exc:
-			message = f"加载失败：{exc}"
+			message = f"Load failed: {exc}"
 			continue
 
 		if runner is None:
-			message = f"选项 {choice} 未注册。"
+			message = f"Option {choice} is not registered."
 			continue
 
 		# 移交控制权给子游戏。
@@ -317,13 +317,13 @@ def main() -> None:
 	"""程序总入口。"""
 	if curses is None:
 		# 友好提示，避免“窗口一闪而过”。
-		print("[Turing Complete] 启动失败：无法导入 curses。")
-		print(CURSES_ERROR or "未知错误")
-		print("\n建议：")
-		print("1) 使用可联网环境执行: python -m pip install windows-curses")
-		print("2) 安装后重新运行: python main.py")
+		print("[Turing Complete] Startup failed: cannot import curses.")
+		print(CURSES_ERROR or "Unknown error")
+		print("\nSuggestions:")
+		print("1) In a networked environment run: python -m pip install windows-curses")
+		print("2) Re-run after installation: python main.py")
 		try:
-			input("\n按回车键退出...")
+			input("\nPress Enter to exit...")
 		except EOFError:
 			pass
 		return

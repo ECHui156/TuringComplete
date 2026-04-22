@@ -1,19 +1,19 @@
 """
-康威生命游戏模块（Conway's Game of Life）
-========================================
+Conway's Game of Life module
+============================
 
-统一接口：
-- 对外仅暴露 `run(stdscr)`，供主程序动态加载并调用。
+Public interface:
+- Exposes only `run(stdscr)` for dynamic loading by the main program.
 
-交互要求：
-- 方向键：移动光标
-- 空格：切换当前细胞生死
-- P / Enter：暂停或继续（编辑模式 <-> 运行模式）
-- R：随机初始化
-- C：清空画布
-- + / -：加快 / 减慢演化速度
-- G：在光标位置生成滑翔机（Glider）
-- Q：退出返回主菜单
+Controls:
+- Arrow keys: move cursor
+- Space: toggle cell alive/dead
+- P / Enter: pause or resume (edit mode <-> run mode)
+- R: randomize grid
+- C: clear grid
+- + / -: speed up / slow down evolution
+- G: place a glider at cursor
+- Q: quit and return to main menu
 """
 
 from __future__ import annotations
@@ -65,6 +65,35 @@ def safe_addch(stdscr: curses.window, y: int, x: int, ch: str, attr: int = 0) ->
 	"""安全写单字符。"""
 	try:
 		stdscr.addch(y, x, ch, attr)
+	except curses.error:
+		pass
+
+
+def clip_text_to_width(text: str, max_x: int) -> str:
+	"""Clip a text line to terminal width to avoid rendering artifacts."""
+	if max_x <= 0:
+		return ""
+	# Avoid writing to the last column to reduce terminal edge errors.
+	return text[: max(0, max_x - 1)]
+
+
+def safe_draw_line(stdscr: curses.window, y: int, text: str, attr: int = 0) -> None:
+	"""Clear a full line and draw text clipped to current terminal width."""
+	max_y, max_x = stdscr.getmaxyx()
+	if y < 0 or y >= max_y:
+		return
+
+	try:
+		stdscr.move(y, 0)
+		stdscr.clrtoeol()
+	except curses.error:
+		pass
+
+	if max_x <= 0:
+		return
+
+	try:
+		stdscr.addnstr(y, 0, text, max_x, attr)
 	except curses.error:
 		pass
 
@@ -216,21 +245,25 @@ def calc_playfield_size(stdscr: curses.window) -> tuple[int, int, int, int]:
 def render(stdscr: curses.window, state: LifeState) -> None:
 	"""绘制整个界面（标题、状态条、网格、帮助）。"""
 	stdscr.erase()
+	max_y, _ = stdscr.getmaxyx()
 
 	origin_y, origin_x, grid_h, grid_w = calc_playfield_size(stdscr)
 
-	mode_text = "运行模式" if state.running else "编辑模式"
-	speed_text = f"{state.delay:.2f}s/代"
+	mode_text = "RUN" if state.running else "EDIT"
+	speed_text = f"{state.delay:.2f}s/gen"
 
 	# 顶部标题。
-	safe_addstr(stdscr, 0, 0, "康威生命游戏 (Conway's Game of Life)", curses.A_BOLD)
+	title = "Conway's Game of Life"
+	safe_draw_line(stdscr, 0, title, curses.A_BOLD)
 
 	# 状态栏：显示模式、代数、速度、当前坐标。
+	coord_y = state.cursor_y + 1
+	coord_x = state.cursor_x + 1
 	status = (
-		f"模式: {mode_text} | 代数: {state.generation} | 速度: {speed_text} "
-		f"| 光标: ({state.cursor_y}, {state.cursor_x})"
+		f"Mode: {mode_text} | Gen: {state.generation} | Speed: {speed_text} "
+		f"| Cursor: ({coord_y}, {coord_x})"
 	)
-	safe_addstr(stdscr, 1, 0, status)
+	safe_draw_line(stdscr, 1, status)
 
 	# 网格绘制：
 	# - 活细胞使用实心块 '█'
@@ -255,10 +288,9 @@ def render(stdscr: curses.window, state: LifeState) -> None:
 
 	# 帮助行。
 	help_text = (
-		"方向键移动 | 空格切换细胞 | P/Enter 运行/暂停 | R随机 | C清空 | +/-速度 | G滑翔机 | Q返回"
+		"Arrows move | Space toggle | P/Enter run/pause | R random | C clear | +/- speed | G glider | Q back"
 	)
-	max_y, _ = stdscr.getmaxyx()
-	safe_addstr(stdscr, max_y - 1, 0, help_text, curses.A_DIM)
+	safe_draw_line(stdscr, max_y - 1, help_text, curses.A_DIM)
 
 	stdscr.refresh()
 
@@ -352,6 +384,9 @@ def run(stdscr: curses.window) -> None:
 
 	# 子游戏内部初始化。
 	stdscr.keypad(True)
+	# 强制整屏清除，避免主菜单字符残留到子游戏界面。
+	stdscr.clear()
+	stdscr.refresh()
 	try:
 		curses.curs_set(0)
 	except curses.error:
