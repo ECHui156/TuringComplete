@@ -156,6 +156,16 @@ def build_registry() -> GameRegistry:
 		)
 	)
 
+	# 图灵机模拟器。
+	registry.register(
+		GameSpec(
+			key="3",
+			title="Turing Machine",
+			module="turing_machine",
+			entry="run",
+		)
+	)
+
 	# 未来新增游戏时，在这里追加 register(...) 即可。
 	return registry
 
